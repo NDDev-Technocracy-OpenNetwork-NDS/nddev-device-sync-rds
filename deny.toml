@@ -27,11 +27,11 @@ version = "=0.1.2"
 allow = ["BSD-2-Clause"]
 [[licenses.exceptions]]
 name = "webpki-roots"
-version = "=1.0.9"
+version = "=1.0.10"
 allow = ["CDLA-Permissive-2.0"]
 [[licenses.exceptions]]
 name = "webpki-root-certs"
-version = "=1.0.9"
+version = "=1.0.10"
 allow = ["CDLA-Permissive-2.0"]
 # Browser relay implementation only; exact published artifacts were reviewed.
 [[licenses.exceptions]]
