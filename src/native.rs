@@ -46,26 +46,7 @@ impl Rds {
             max_output_bytes: 65_536,
         };
         let (snapshot, _): (RemoteSnapshot, _) = self.io.json(request, &[0], cancellation).await?;
-        if !hex(&snapshot.instance, 32)
-            || !hex(&snapshot.endpoint, 64)
-            || snapshot.sessions.len() > 32
-            || snapshot
-                .selected
-                .as_ref()
-                .is_some_and(|id| !snapshot.sessions.iter().any(|session| &session.id == id))
-            || snapshot
-                .sessions
-                .iter()
-                .any(|session| !hex(&session.id, 32) || !hex(&session.peer, 64))
-        {
-            return Err(IoError::InvalidResponse);
-        }
-        let mut ids = std::collections::BTreeSet::new();
-        if snapshot
-            .sessions
-            .iter()
-            .any(|session| !ids.insert(&session.id))
-        {
+        if !consistent(&snapshot) {
             return Err(IoError::InvalidResponse);
         }
         Ok(snapshot)
@@ -74,4 +55,110 @@ impl Rds {
 
 fn hex(value: &str, bytes: usize) -> bool {
     value.len() == bytes && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn consistent(snapshot: &RemoteSnapshot) -> bool {
+    if !hex(&snapshot.instance, 32)
+        || !hex(&snapshot.endpoint, 64)
+        || snapshot.sessions.len() > 32
+        || snapshot
+            .selected
+            .as_ref()
+            .is_some_and(|id| !snapshot.sessions.iter().any(|session| &session.id == id))
+        || snapshot
+            .sessions
+            .iter()
+            .any(|session| !hex(&session.id, 32) || !hex(&session.peer, 64))
+    {
+        return false;
+    }
+    let mut ids = std::collections::BTreeSet::new();
+    snapshot
+        .sessions
+        .iter()
+        .all(|session| ids.insert(&session.id))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nddev_device_sync_adapter_io::NativeIo;
+
+    fn session(id: &str) -> RemoteSession {
+        RemoteSession {
+            id: id.into(),
+            peer: "f".repeat(64),
+            status: SessionState::Connected,
+        }
+    }
+
+    fn snapshot() -> RemoteSnapshot {
+        RemoteSnapshot {
+            instance: "a".repeat(32),
+            generation: 1,
+            endpoint: "e".repeat(64),
+            selected: None,
+            sessions: vec![session(&"1".repeat(32))],
+        }
+    }
+
+    #[test]
+    fn hex_accepts_only_exact_ascii_hex_lengths() {
+        assert!(hex(&"ab".repeat(16), 32));
+        assert!(!hex(&"ab".repeat(16), 31));
+        assert!(!hex("zz", 2));
+        assert!(!hex("aB\n", 3));
+    }
+
+    #[test]
+    fn consistent_snapshot_requires_hex_identity_bounded_sessions_and_membership() {
+        assert!(consistent(&snapshot()));
+        let mut wrong = snapshot();
+        wrong.instance = "not-hex".into();
+        assert!(!consistent(&wrong));
+        let mut wrong = snapshot();
+        wrong.selected = Some("2".repeat(32));
+        assert!(!consistent(&wrong));
+        let mut ok = snapshot();
+        ok.selected = Some("1".repeat(32));
+        assert!(consistent(&ok));
+        let mut crowded = snapshot();
+        crowded.sessions = vec![session(&"1".repeat(32)); 33];
+        assert!(!consistent(&crowded));
+    }
+
+    #[test]
+    fn duplicate_session_ids_are_rejected() {
+        let mut duplicated = snapshot();
+        duplicated.sessions.push(session(&"1".repeat(32)));
+        assert!(!consistent(&duplicated));
+        let mut distinct = snapshot();
+        distinct.sessions.push(session(&"2".repeat(32)));
+        assert!(consistent(&distinct));
+    }
+
+    #[test]
+    fn constructor_requires_absolute_paths() {
+        let io = NativeIo::new(1).unwrap().process_handle();
+        assert!(matches!(
+            Rds::new(io.clone(), PathBuf::from("rds"), None),
+            Err(IoError::InvalidConfiguration)
+        ));
+        assert!(matches!(
+            Rds::new(
+                io.clone(),
+                PathBuf::from("/usr/bin/rds"),
+                Some(PathBuf::from("rel"))
+            ),
+            Err(IoError::InvalidConfiguration)
+        ));
+        assert!(
+            Rds::new(
+                io,
+                PathBuf::from("/usr/bin/rds"),
+                Some(PathBuf::from("/var/lib/rds"))
+            )
+            .is_ok()
+        );
+    }
 }
