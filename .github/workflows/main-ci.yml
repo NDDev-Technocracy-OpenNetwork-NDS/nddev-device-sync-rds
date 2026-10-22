@@ -1,0 +1,122 @@
+name: main-ci
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: main-validation
+  cancel-in-progress: false
+
+jobs:
+  contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Configure checked Cargo environment
+        shell: bash
+        env:
+          CARGO_HOME: ${{ runner.temp }}/rds-cargo-home
+        run: printf '%s\n' "CARGO_HOME=$CARGO_HOME" >> "$GITHUB_ENV"
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt,clippy
+      - name: Prepare checked library metadata inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/prepare-library-provider.py --destination "${{ runner.temp }}/rds-provider" --config "${{ runner.temp }}/rds-cargo-home/config.toml"
+      - name: Install pinned quality tools
+        run: |
+          cargo install --locked --version 0.22.2 cargo-audit
+          cargo install --locked --version 0.20.2 cargo-deny
+      - name: Run the STD-0004 native Rust contract
+        id: native
+        uses: NDDev-Technocracy-Standarts/std-0004-ci-cd-workflows/.github/actions/ci@a77e385fcf3c1b000c38167ecac7b74bb7715b10 # std-0004-v0.3.1
+      - name: Require complete native results
+        if: ${{ !cancelled() }}
+        env:
+          STATUS: ${{ steps.native.outputs.status }}
+        run: test "$STATUS" = success
+
+  matrix:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Configure checked Cargo environment
+        shell: bash
+        env:
+          CARGO_HOME: ${{ runner.temp }}/rds-cargo-home
+        run: printf '%s\n' "CARGO_HOME=$CARGO_HOME" >> "$GITHUB_ENV"
+      - name: Install pinned Rust
+        run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt,clippy
+      - name: Prepare checked library metadata inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/prepare-library-provider.py --destination "${{ runner.temp }}/rds-provider" --config "${{ runner.temp }}/rds-cargo-home/config.toml"
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Lint
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+      - name: Native transport tests
+        run: cargo test --locked --workspace
+      - name: Dependency policy and advisory checks
+        if: runner.os == 'Linux'
+        run: |
+          cargo install --locked --version 0.20.2 cargo-deny
+          cargo install --locked --version 0.22.2 cargo-audit
+          cargo deny --locked --all-features check
+          cargo audit --deny warnings
+      - name: Fetch verified native provider
+        if: runner.os == 'Linux'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          curl --fail --location --max-time 60 https://raw.githubusercontent.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-agent/341644980976a08825b194f147b7534321325785/scripts/fetch-provider.py --output "$RUNNER_TEMP/fetch-provider.py"
+          python3 "$RUNNER_TEMP/fetch-provider.py" provider.lock.json "$RUNNER_TEMP/native-provider"
+      - name: Real isolated native provider acceptance
+        if: runner.os == 'Linux'
+        run: cargo test --locked --test provider -- --ignored
+
+  owned-screen-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Configure checked Cargo environment
+        shell: bash
+        env:
+          CARGO_HOME: ${{ runner.temp }}/rds-owned-cargo-home
+          NDS_RECEIVER_RESULTS: ${{ runner.temp }}/rds-owned-receiver-results.json
+        run: printf '%s\n' "CARGO_HOME=$CARGO_HOME" "NDS_RECEIVER_RESULTS=$NDS_RECEIVER_RESULTS" >> "$GITHUB_ENV"
+      - name: Install pinned Rust
+        run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt,clippy
+      - name: Install Linux build and owned display inputs
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends libclang-dev pkg-config libssl-dev libx11-dev nasm xvfb xauth x11-utils
+      - name: Prepare checked library inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/prepare-library-provider.py --destination "$RUNNER_TEMP/rds-owned-provider" --config "$RUNNER_TEMP/rds-owned-cargo-home/config.toml"
+      - name: Lint owned-screen feature
+        run: cargo clippy --locked --features owned-screen --all-targets -- -D warnings
+      - name: Typed boundary tests
+        run: cargo test --locked --features owned-screen --lib
+      - name: Actual native receiver subsystem
+        run: python3 scripts/owned-x11.py -- cargo test --locked --features owned-screen --lib actual_receiver_age_pause_idle_pressure_and_expiry -- --ignored --nocapture
