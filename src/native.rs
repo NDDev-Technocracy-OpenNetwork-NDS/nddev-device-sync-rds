@@ -147,7 +147,7 @@ mod tests {
         assert!(matches!(
             Rds::new(
                 io.clone(),
-                PathBuf::from("/usr/bin/rds"),
+                std::env::temp_dir().join("rds"),
                 Some(PathBuf::from("rel"))
             ),
             Err(IoError::InvalidConfiguration)
@@ -155,8 +155,8 @@ mod tests {
         assert!(
             Rds::new(
                 io,
-                PathBuf::from("/usr/bin/rds"),
-                Some(PathBuf::from("/var/lib/rds"))
+                std::env::temp_dir().join("rds"),
+                Some(std::env::temp_dir().join("rds-state"))
             )
             .is_ok()
         );
