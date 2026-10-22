@@ -115,3 +115,5 @@ consumer-root config for external tools and rejects lock changes. The default
 native-input/default-SDK gate remains distinct. After publishing the atomic SDK
 commit, adopt a separate owned-profile consumer lock once, then repeat that
 exact public Git revision in a new cache with the reviewed lock.
+
+Release journals live in [GitHub Releases](https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-rds/releases).
