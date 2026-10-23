@@ -1,5 +1,12 @@
 [advisories]
 yanked = "deny"
+# Transitive entries of the pinned remote-device-sync provider graph; both are
+# maintenance-state advisories with no replacement inside the pinned provider
+# release, not vulnerabilities.
+ignore = [
+    "RUSTSEC-2023-0089", # atomic-polyfill is unmaintained
+    "RUSTSEC-2024-0436", # paste is no longer maintained
+]
 [licenses]
 allow = ["AGPL-3.0-only", "Apache-2.0", "BSD-3-Clause", "ISC", "MIT", "Unicode-3.0"]
 confidence-threshold = 0.95
