@@ -88,15 +88,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "atomic-polyfill"
-version = "1.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cf2bce30dfe09ef0bfaef228b9d414faaf7e563035494d7fe092dba54b300f4"
-dependencies = [
- "critical-section",
-]
-
-[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -221,12 +212,6 @@ name = "bytemuck"
 version = "1.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95832e849adfb21180ccb6826a99da14e5d266ae5c2e668e1602cf234f153797"
-
-[[package]]
-name = "byteorder"
-version = "1.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "bytes"
@@ -408,12 +393,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "critical-section"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "790eea4361631c5e7d22598ecd5723ff611904e3344ce8720784c93e3d83d40b"
-
-[[package]]
 name = "crypto-common"
 version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -503,7 +482,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c54e03a951783e8b327515db3f2a2fd0e3bed362a96b066f341ce66ed49b4ead"
 dependencies = [
  "data-encoding",
- "syn 3.0.9",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -750,7 +729,7 @@ dependencies = [
  "diatomic-waker",
  "futures-core",
  "pin-project-lite",
- "spin 0.10.1",
+ "spin",
 ]
 
 [[package]]
@@ -949,35 +928,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "hash32"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0c35f58762feb77d74ebe43bdbc3210f09be9fe6742234d573bacc26ed92b67"
-dependencies = [
- "byteorder",
-]
-
-[[package]]
 name = "hashbrown"
 version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 dependencies = [
  "foldhash",
-]
-
-[[package]]
-name = "heapless"
-version = "0.7.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdc6457c0eb62c71aac4bc17216026d8410337c4126773b9c5daba343f17964f"
-dependencies = [
- "atomic-polyfill",
- "hash32",
- "rustc_version",
- "serde",
- "spin 0.9.9",
- "stable_deref_trait",
 ]
 
 [[package]]
@@ -1296,8 +1252,6 @@ checksum = "791930b43c0d5973160d90a8f3894509f2b273430f5c5c73b668636d0287c5c0"
 [[package]]
 name = "iroh"
 version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "885787b892b5e2507c701f132ecbd45d2bad4bbb75157a19427087c16dadb833"
 dependencies = [
  "backon",
  "blake3",
@@ -1917,10 +1871,8 @@ dependencies = [
 [[package]]
 name = "netlink-packet-core"
 version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b897d7bd4f0af82e68d40d0344cf37e97f9c97ddf74a098de3e4da05e96ca395"
 dependencies = [
- "paste",
+ "pastey",
 ]
 
 [[package]]
@@ -2055,9 +2007,7 @@ dependencies = [
 
 [[package]]
 name = "noq"
-version = "1.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6249a065adc1edbc1704a95436f38dd60476064dbc3b7c47cf279e02d1590eb5"
+version = "1.3.0"
 dependencies = [
  "bytes",
  "cfg_aliases",
@@ -2077,9 +2027,7 @@ dependencies = [
 
 [[package]]
 name = "noq-proto"
-version = "1.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c01a35be3ed37558c8db69554419f24eff8a63599b54f711bbe3863ec727c47d"
+version = "1.3.0"
 dependencies = [
  "aes-gcm",
  "bytes",
@@ -2331,10 +2279,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "paste"
-version = "1.0.15"
+name = "pastey"
+version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
+checksum = "2ee67f1008b1ba2321834326597b8e186293b049a023cdef258527550b9935b4"
 
 [[package]]
 name = "pem-rfc7468"
@@ -2469,7 +2417,6 @@ dependencies = [
  "cobs",
  "embedded-io 0.4.0",
  "embedded-io 0.6.1",
- "heapless",
  "postcard-derive",
  "serde",
 ]
@@ -2584,7 +2531,6 @@ dependencies = [
 [[package]]
 name = "rds-client"
 version = "0.1.0"
-source = "git+https://github.com/NDDev-Technocracy-OpenNetwork/remote-device-sync?rev=2761dbdb76baee0edc2557b02ac7a90472312ab7#2761dbdb76baee0edc2557b02ac7a90472312ab7"
 dependencies = [
  "anyhow",
  "blake3",
@@ -2606,7 +2552,6 @@ dependencies = [
 [[package]]
 name = "rds-core"
 version = "0.1.0"
-source = "git+https://github.com/NDDev-Technocracy-OpenNetwork/remote-device-sync?rev=2761dbdb76baee0edc2557b02ac7a90472312ab7#2761dbdb76baee0edc2557b02ac7a90472312ab7"
 dependencies = [
  "blake3",
  "bytes",
@@ -2622,7 +2567,6 @@ dependencies = [
 [[package]]
 name = "rds-desktop"
 version = "0.1.0"
-source = "git+https://github.com/NDDev-Technocracy-OpenNetwork/remote-device-sync?rev=2761dbdb76baee0edc2557b02ac7a90472312ab7#2761dbdb76baee0edc2557b02ac7a90472312ab7"
 dependencies = [
  "blake3",
  "bytes",
@@ -2643,7 +2587,6 @@ dependencies = [
 [[package]]
 name = "rds-discovery"
 version = "0.1.0"
-source = "git+https://github.com/NDDev-Technocracy-OpenNetwork/remote-device-sync?rev=2761dbdb76baee0edc2557b02ac7a90472312ab7#2761dbdb76baee0edc2557b02ac7a90472312ab7"
 dependencies = [
  "blake3",
  "data-encoding",
@@ -2667,7 +2610,6 @@ dependencies = [
 [[package]]
 name = "rds-net"
 version = "0.1.0"
-source = "git+https://github.com/NDDev-Technocracy-OpenNetwork/remote-device-sync?rev=2761dbdb76baee0edc2557b02ac7a90472312ab7#2761dbdb76baee0edc2557b02ac7a90472312ab7"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2690,7 +2632,6 @@ dependencies = [
 [[package]]
 name = "rds-observe"
 version = "0.1.0"
-source = "git+https://github.com/NDDev-Technocracy-OpenNetwork/remote-device-sync?rev=2761dbdb76baee0edc2557b02ac7a90472312ab7#2761dbdb76baee0edc2557b02ac7a90472312ab7"
 dependencies = [
  "httparse",
  "rand",
@@ -2708,7 +2649,6 @@ dependencies = [
 [[package]]
 name = "rds-sync"
 version = "0.1.0"
-source = "git+https://github.com/NDDev-Technocracy-OpenNetwork/remote-device-sync?rev=2761dbdb76baee0edc2557b02ac7a90472312ab7#2761dbdb76baee0edc2557b02ac7a90472312ab7"
 dependencies = [
  "anyhow",
  "blake3",
@@ -3206,15 +3146,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
-]
-
-[[package]]
-name = "spin"
-version = "0.9.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3763264f6b73151db08c50ff20d7d8a0b8796e021cdea7ceedad07b80155fa0e"
-dependencies = [
- "lock_api",
 ]
 
 [[package]]
@@ -4398,3 +4329,7 @@ name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
+
+[[patch.unused]]
+name = "rds-agent"
+version = "0.1.0"
