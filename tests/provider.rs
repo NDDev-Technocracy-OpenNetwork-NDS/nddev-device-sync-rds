@@ -1,5 +1,8 @@
 use nddev_device_sync_adapter_io::{CancellationToken, NativeIo, ProcessRequest};
-use nddev_device_sync_rds::{Rds, RemoteSnapshot, SessionState};
+use nddev_device_sync_rds::{
+    Rds, ReadRds,
+    view::{RemoteSnapshot, SessionState},
+};
 use std::{
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},

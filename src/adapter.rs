@@ -1,5 +1,5 @@
-use crate::view::*;
-use nddev_device_sync_adapter_io::{CancellationToken, IoError, ProcessIo, ProcessRequest};
+use crate::{Error, IoError, ReadRds, view::*};
+use nddev_device_sync_adapter_io::{CancellationToken, ProcessIo, ProcessRequest};
 
 use std::{path::PathBuf, time::Duration};
 
@@ -15,13 +15,13 @@ impl Rds {
         io: ProcessIo,
         executable: PathBuf,
         control_directory: Option<PathBuf>,
-    ) -> Result<Self, IoError> {
+    ) -> Result<Self, Error> {
         if !executable.is_absolute()
             || control_directory
                 .as_ref()
                 .is_some_and(|path| !path.is_absolute())
         {
-            return Err(IoError::InvalidConfiguration);
+            return Err(IoError::InvalidConfiguration.into());
         }
         Ok(Self {
             io,
@@ -29,11 +29,10 @@ impl Rds {
             control_directory,
         })
     }
+}
 
-    pub async fn sessions(
-        &self,
-        cancellation: CancellationToken,
-    ) -> Result<RemoteSnapshot, IoError> {
+impl ReadRds for Rds {
+    async fn sessions(&self, cancellation: CancellationToken) -> Result<RemoteSnapshot, Error> {
         let mut arguments = vec!["session".into(), "list".into(), "--json".into()];
         if let Some(directory) = &self.control_directory {
             arguments.extend(["--control-dir".into(), directory.as_os_str().into()]);
@@ -47,7 +46,7 @@ impl Rds {
         };
         let (snapshot, _): (RemoteSnapshot, _) = self.io.json(request, &[0], cancellation).await?;
         if !consistent(&snapshot) {
-            return Err(IoError::InvalidResponse);
+            return Err(Error::Protocol);
         }
         Ok(snapshot)
     }
@@ -142,7 +141,7 @@ mod tests {
         let io = NativeIo::new(1).unwrap().process_handle();
         assert!(matches!(
             Rds::new(io.clone(), PathBuf::from("rds"), None),
-            Err(IoError::InvalidConfiguration)
+            Err(Error::Io(IoError::InvalidConfiguration))
         ));
         assert!(matches!(
             Rds::new(
@@ -150,7 +149,7 @@ mod tests {
                 std::env::temp_dir().join("rds"),
                 Some(PathBuf::from("rel"))
             ),
-            Err(IoError::InvalidConfiguration)
+            Err(Error::Io(IoError::InvalidConfiguration))
         ));
         assert!(
             Rds::new(
