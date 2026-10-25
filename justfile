@@ -1,6 +1,7 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 check:
+    python3 -B -m unittest discover -s scripts -p test_library.py
     cargo fmt -- --check
     rustfmt --edition 2024 --check src/screen.rs qualification/screen.rs qualification/browser/transport.rs qualification/browser/fixture.rs qualification/browser/receiver_probe.rs
     rustfmt --edition 2024 --check qualification/library.rs qualification/owned-library.rs
