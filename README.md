@@ -111,6 +111,8 @@ puts `features=["owned-screen"]` on the downstream SDK dependency and compiles
 adoption uses that same declared dependency profile; metadata, lint, build and
 any test commands also select its consumer feature. The gate checks the SDK
 feature node and exact public Git/Core/native sources. It retains the same
+Core versions and immutable revision declared by the selected SDK manifest;
+mixed revisions and duplicate Core package identities are rejected. It keeps the
 consumer-root config for external tools and rejects lock changes. The default
 native-input/default-SDK gate remains distinct. After publishing the atomic SDK
 commit, adopt a separate owned-profile consumer lock once, then repeat that
