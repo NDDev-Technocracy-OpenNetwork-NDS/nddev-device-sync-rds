@@ -23,6 +23,25 @@ import urllib.request
 
 REPOSITORY = "NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-rds"
 TARGET = "x86_64-unknown-linux-gnu"
+CORE_REPOSITORY = "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-core.git"
+CORE_PACKAGES = ("nddev-device-sync-domain", "nddev-device-sync-application")
+
+
+def owned_core_inputs(manifest):
+    """Select the SDK's exact Core graph, rather than another frozen revision."""
+    dependencies = manifest["target"]['cfg(target_os = "linux")']["dependencies"]
+    result = {}
+    for name in CORE_PACKAGES:
+        dep = dependencies[name]
+        if (dep.get("git") != CORE_REPOSITORY
+                or not re.fullmatch(r"[0-9a-f]{40}", dep.get("rev", ""))
+                or not re.fullmatch(r"=\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?", dep.get("version", ""))
+                or any(key in dep for key in ("path", "branch", "tag", "registry", "package"))):
+            raise ValueError("owned API witness requires immutable canonical Core inputs")
+        result[name] = {key: dep[key] for key in ("version", "git", "rev", "default-features", "features") if key in dep}
+    if len({dep["rev"] for dep in result.values()}) != 1:
+        raise ValueError("owned API witness requires one coordinated Core revision")
+    return result
 
 
 def run(args, **kwargs):
@@ -82,6 +101,8 @@ def main():
         if len(entries) != 1 or not entries[0].is_dir():
             raise ValueError("invalid NDS archive root")
         source = entries[0]
+    sdk_manifest = tomllib.loads((source / "Cargo.toml").read_text())
+    core_inputs = owned_core_inputs(sdk_manifest) if args.owned_screen else {}
     sys.dont_write_bytecode = True
     imported = spec_from_file_location("library_bootstrap", source / "scripts/prepare-library-provider.py")
     bootstrap = module_from_spec(imported)
@@ -96,7 +117,6 @@ def main():
     (consumer / "src").mkdir(parents=True)
     quote = lambda value: json.dumps(str(value))
     sdk = f"git={quote('https://github.com/' + REPOSITORY)},rev={quote(args.public_commit)}" if args.public_commit else f"path={quote(source)}"
-    sdk_manifest = tomllib.loads((source / "Cargo.toml").read_text())
     sdk_version = sdk_manifest["package"]["version"]
     sdk_features = ["owned-screen"] if args.owned_screen else []
     # Fetch/lock adoption uses this same unconditional SDK dependency feature;
@@ -110,15 +130,8 @@ def main():
     manifest.extend(["[dependencies]",
                      f"nddev-device-sync-rds={{{sdk},version=\"={sdk_version}\",features={json.dumps(sdk_features)}}}"])
     if args.owned_screen:
-        core_dependencies = sdk_manifest["target"]['cfg(target_os = "linux")']["dependencies"]
-        for name, version in [("nddev-device-sync-domain", "=0.0.12"),
-                              ("nddev-device-sync-application", "=0.0.1-alpha.21")]:
-            dep = core_dependencies[name]
-            if (dep["git"] != "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-core.git"
-                    or dep["rev"] != "889f0f4a9b6416e92eaaac111471a9d700ef8468"
-                    or dep["version"] != version):
-                raise ValueError("owned API witness requires coordinated canonical Core inputs")
-            manifest.append(name + "={version=" + quote(version) + ",git=" + quote(dep["git"]) + ",rev=" + quote(dep["rev"]) + "}")
+        for name, dep in core_inputs.items():
+            manifest.append(name + "={" + ",".join(key + "=" + json.dumps(value) for key, value in dep.items()) + "}")
         manifest.append('tokio-util={version="0.7",features=["rt"]}')
     native = "https://github.com/" + preparation["source"]["repository"]
     for name, features in libraries.items():
@@ -169,10 +182,10 @@ def main():
         raise ValueError("the SDK does not have the selected qualification feature")
     sdk_package = packages[sdk_node["id"]]
     if args.owned_screen:
-        for name, version in [("nddev-device-sync-domain", "0.0.12"),
-                              ("nddev-device-sync-application", "0.0.1-alpha.21")]:
-            package = packages[node_for(name, version)["id"]]
-            if package["source"] != "git+https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-core.git?rev=889f0f4a9b6416e92eaaac111471a9d700ef8468#889f0f4a9b6416e92eaaac111471a9d700ef8468":
+        for name, dep in core_inputs.items():
+            package = packages[node_for(name)["id"]]
+            if (package["version"] != dep["version"][1:]
+                    or package["source"] != f"git+{dep['git']}?rev={dep['rev']}#{dep['rev']}"):
                 raise ValueError("owned API witness lost canonical Core source identity")
     sdk_source = sdk_package["source"]
     if args.public_commit:
@@ -218,6 +231,7 @@ def main():
                "public_commit": args.public_commit, "nds_archive_sha256": digest(archive),
                "sdk_source": sdk_source,
                "sdk_features": sdk_features,
+               "core_inputs": core_inputs,
                "qualification_profile": "owned-screen-api" if args.owned_screen else "native-inputs-default-sdk",
                "api_witness_sha256": digest(witness),
                "selected_native_libraries": libraries,
