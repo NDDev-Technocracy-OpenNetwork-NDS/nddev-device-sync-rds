@@ -64,6 +64,23 @@ the native alloc/std serialization APIs and wire types. Advisory gates reject
 maintenance warnings as well as known vulnerabilities.
 Use a dedicated Cargo home with this generated config for external Cargo tools
 as well; the gate rejects tools that silently alter its lockfile/source graph.
+The committed lock resolves these checked patches, including the vendored
+Iroh/Noq family. Plain Cargo has a different graph: do not regenerate the lock
+against raw upstream sources to silence that mismatch. From this repository on
+Linux, prepare fresh inputs outside the checkout and verify the locked graph:
+
+```sh
+rds_inputs="$(mktemp -d "${TMPDIR:-/tmp}/nds-rds-inputs.XXXXXXXX")"
+python3 scripts/prepare-library-provider.py \
+  --destination "$rds_inputs/provider" --config "$rds_inputs/cargo-home/config.toml"
+CARGO_HOME="$rds_inputs/cargo-home" cargo metadata --locked --features owned-screen --format-version 1 > /dev/null
+CARGO_HOME="$rds_inputs/cargo-home" just check
+CARGO_HOME="$rds_inputs/cargo-home" cargo deny --locked check licenses sources
+```
+
+Retain the owned input directory through verification, then remove it when no
+consumer is using it. Existing `insteadOf` rewrites, cached inputs or
+`[[patch.unused]]` entries cannot substitute for a fresh prepared graph.
 Only `rds-agent/desktop` and `rds-desktop/x11` are selected; the provider GUI,
 portal and owned transport backend are excluded from this first library gate.
 
