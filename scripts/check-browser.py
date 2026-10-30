@@ -96,7 +96,8 @@ def main():
         run(["cargo-deny", "--locked", "--manifest-path", str(project / "Cargo.toml"), "--config", str(repo / "deny.toml"), "--target", target, "check"], env=build_env)
         run(["cargo", "audit", "--deny", "warnings", "--file", str(project / "Cargo.lock")], env=build_env)
         run(["rustup", "run", toolchain, "cargo", "clippy", "--manifest-path", str(project / "Cargo.toml"), "--locked", "--target", target, "--", "-D", "warnings"], env=build_env)
-        compiled = subprocess.run(["rustup", "run", toolchain, "cargo", "build", "--manifest-path", str(project / "Cargo.toml"), "--locked", "--target", target, "--message-format=json"], env=build_env, text=True, stdout=subprocess.PIPE)
+        profile = ["--release"] if project == client else []
+        compiled = subprocess.run(["rustup", "run", toolchain, "cargo", "build", "--manifest-path", str(project / "Cargo.toml"), "--locked", "--target", target, "--message-format=json", *profile], env=build_env, text=True, stdout=subprocess.PIPE)
         (project / "build.jsonl").write_text(compiled.stdout)
         records = [json.loads(line) for line in compiled.stdout.splitlines() if line.startswith("{")]
         if compiled.returncode:
