@@ -89,6 +89,10 @@ the native alloc/std serialization APIs and wire types. Advisory gates reject
 maintenance warnings as well as known vulnerabilities.
 Use a dedicated Cargo home with this generated config for external Cargo tools
 as well; the gate rejects tools that silently alter its lockfile/source graph.
+The SDK gate invokes the native cargo-deny entrypoint with its precomputed
+metadata and policy file. The same prepared Cargo home remains in effect, so
+an external tool's policy option cannot be consumed as Cargo source config.
+
 The committed lock resolves these checked patches, including the vendored
 Iroh/Noq family. Plain Cargo has a different graph: do not regenerate the lock
 against raw upstream sources to silence that mismatch. From this repository on
