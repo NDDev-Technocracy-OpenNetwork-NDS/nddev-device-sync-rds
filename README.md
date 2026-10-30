@@ -1,15 +1,26 @@
 # NDDev OpenNetwork · rds
 
-AGPL-3.0-only NDS adapter. [NDDev OpenNetwork](https://nddev.ai).
+AGPL-3.0-only NDS remote-display module. [NDDev OpenNetwork](https://nddev.ai).
 
-Read the native manager identity, selection and live sessions through its keyless CLI. No key creation, session mutation, desktop rendering or transport replacement is exposed.
+The opt-in Linux `owned-screen` library supplies an X11 host and native H264
+receiver over encrypted, exact-peer sessions. The existing NdsClient supplies
+Accounts authorization, endpoint-key ownership, original scope and presentation.
+A separately installed archived desktop executable is not required by this path.
+The default API observes the existing native manager's identity, selection and
+live sessions through its keyless CLI, without changing that manager or its state.
+
+Viewing is the alpha boundary. Remote input, shell, clipboard, file transfer and
+audio are not exposed by the owned screen API. Wayland, macOS and Windows capture
+are unsupported here. Linux library/subsystem qualification, actual
+Accounts-authenticated NDS viewing and each platform's presentation remain
+separate gates; the browser fixture below is not an exported Web viewer.
 
 `contracts/module.json` is the canonical compiled-in runtime descriptor;
 `module.yaml` identifies its repository package. Caller-owned local/process
 capability handles share a bounded agent admission budget. Native responses,
 private paths and content are never Debug or telemetry payloads.
 
-Run `just check`, then `just provider-check` with the explicit `NDS_TEST_*`
+Run `just` for command discovery. Run `just check`, then `just provider-check` with the explicit `NDS_TEST_*`
 provider paths used by CI. Acceptance exercises the real pinned native owner
 in isolated temporary state. Linux provider acceptance and portable source
 checks are distinct; an absent provider is unavailable, not a successful stub.
@@ -21,7 +32,11 @@ and GitHub-hosted runner with `gh attestation verify --bundle`. The signing
 repository remains the identity recorded when the release was issued; verification
 does not depend on GitHub retaining its attestation API entry after a transfer.
 
-Screen integration is being qualified separately from the exported read-only API.
+The issued compatibility binaries selected by `provider.lock.json` exclude desktop
+features. Their
+provenance does not qualify the source-built host or receiver.
+
+Screen integration has separate gates from the default read-only API.
 `src/screen.rs` consumes the core-owned `screen` contract; it exposes no input or
 clipboard operations. `scripts/check-screen.py --help` describes the explicit
 core/provider inputs and private output directory. It verifies the desktop source
@@ -49,6 +64,12 @@ It checks cancellation, expiry, retained packets, one-use endpoint signatures an
 bounded binary/text WebSocket queues. The checked transport overlay caps its Rust
 receive queue at eight messages of at most 1 MiB; browser-owned buffers have their
 own lifetime. The loopback HTTP/WS fixture is not production HTTPS/WSS acceptance.
+Use `--prepare-only` to derive the checked native/WASM consumer inputs for lock
+review without running a compiler or browser. Preparation is not acceptance; the
+full fixture requires its explicit native browser inputs and retains the sandbox.
+`--build-only` compiles the native fixture and WASM assets, records actual Cargo
+artifact paths and digests, and exits before browser execution. This supports a
+separate native display/browser job using the existing owned fixture driver.
 Its ephemeral keys and fixture grants do not establish NDS device authorization
 or native trust. This code is a qualification input, not an exported NDS browser
 viewer. Other browsers, Wayland and other native platforms remain unqualified.
@@ -59,11 +80,25 @@ the checked source preparer and emits one consumer-root Cargo override file.
 An optional `--archive` accepts the exact published provider source archive.
 Generated inputs/config stay outside this repository. Consumers supply CONFIG
 to every top-level Cargo command; dependency-local patches are ignored by Cargo.
+The build-input lock also identifies a small AGPL-3.0-only desktop source overlay.
+It joins active native capture and codec work before reporting their completion;
+the original source archive, Git revision and release signer remain unchanged.
+The owned receiver requires its native completion API revision at compile time,
+so raw or older prepared provider inputs cannot silently satisfy this path.
+Every changed source file has exact before/after digests. Preparation checks the
+entire derived tree and rejects unrelated edits or reuse of older prepared inputs.
+Use the selected SDK's preparer in a fresh admitted input directory; an old
+consumer config does not adopt a new source overlay.
+
 Checked manifests disable unused Postcard heapless/CAS defaults while retaining
 the native alloc/std serialization APIs and wire types. Advisory gates reject
 maintenance warnings as well as known vulnerabilities.
 Use a dedicated Cargo home with this generated config for external Cargo tools
 as well; the gate rejects tools that silently alter its lockfile/source graph.
+The SDK gate invokes the native cargo-deny entrypoint with its precomputed
+metadata and policy file. The same prepared Cargo home remains in effect, so
+an external tool's policy option cannot be consumed as Cargo source config.
+
 The committed lock resolves these checked patches, including the vendored
 Iroh/Noq family. Plain Cargo has a different graph: do not regenerate the lock
 against raw upstream sources to silence that mismatch. From this repository on
@@ -112,9 +147,29 @@ Normal unchanged idle uses the existing heartbeat and IDR refresh.
 
 `NativeViewer::close` borrows the viewer while joining its owned tasks. A caller
 may bound that wait; cancellation retains unfinished handles and any observed
-join failure. Keep the viewer until `is_drained()` confirms every handle has
-completed, and preserve the returned close error. Cancellation alone does not
-confirm cleanup.
+join failure. Keep the viewer until `is_drained()` confirms both its receiver tasks and the
+retained native decoder operation have completed, and preserve the returned
+close error. A receive deadline stops pixel publication while a native call may
+still be draining. Cancellation alone does not confirm cleanup.
+
+`BuiltinHost::serve` closes only its admitted connection on cancellation or
+expiry, then awaits the same serving operation and native capture. Keep that
+exact task and its Accounts purpose/key lease across an interrupted close wait.
+Receiver, heartbeat and retained decoder tasks carry the initiating tracing span
+and subscriber; the existing SDK remains the sole diagnostic delivery owner.
+An unresponsive native source keeps drain unresolved; it does not authorize
+releasing the old owner or starting a conflicting replacement.
+
+On an admitted native Linux executor, prepare the checked Cargo environment
+above and set `NDS_RECEIVER_RESULTS` and `NDS_HOST_DRAIN_RESULTS` to separate
+files in the owned qualification output directory, then run
+`just owned-screen-check`. It uses separate private Xvfb lifetimes for the
+receiver and host-drain scenarios. The latter pauses only its retained fixture
+process, checks that cancellation/expiry cannot acknowledge capture drain while
+that source is stopped, then resumes it and joins before endpoint cleanup.
+The retained-job unit regression checks cancellation ordering and failure
+retention; it is not a physical codec acceptance claim. Run the actual native
+and downstream SDK gates for the selected source before adoption.
 
 The separate `owned-screen-linux` CI gate runs the receiver subsystem on its own
 Xvfb, generated native keys and passive Core projection. The fixture test is

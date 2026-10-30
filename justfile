@@ -1,5 +1,9 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
+# List operations without building or preparing inputs.
+default:
+    @just --list
+
 check:
     python3 -B -m unittest discover -s scripts -p test_library.py
     cargo fmt -- --check
@@ -19,3 +23,9 @@ browser-check:
 
 library-prepare destination config:
     python3 scripts/prepare-library-provider.py --destination "{{destination}}" --config "{{config}}"
+
+# Invoke only in an admitted native Linux consumer workdir with checked inputs.
+owned-screen-check:
+    cargo test --locked --features owned-screen --lib
+    python3 scripts/owned-x11.py -- cargo test --locked --features owned-screen --lib actual_receiver_age_pause_idle_pressure_and_expiry -- --ignored --nocapture
+    python3 scripts/owned-x11.py -- cargo test --locked --features owned-screen --lib actual_builtin_host_retains_capture_until_cancel_or_expiry_drains -- --ignored --nocapture

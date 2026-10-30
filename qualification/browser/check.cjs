@@ -20,7 +20,7 @@ async function ownedFixture() {
 }
 
 (async () => {
-  const browser = await chromium.launch({executablePath: browserBin, headless: true});
+  const browser = await chromium.launch({executablePath: browserBin, headless: true, chromiumSandbox: true});
   const results = [];
   try {
     for (const scenario of ['changing', 'binding', 'retained-age', 'expiry-rollback', 'observed-expiry', 'retention', 'expiry', 'static', 'websocket']) {
