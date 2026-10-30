@@ -25,7 +25,7 @@ unsafe_code = "forbid"
 
 # Checked provider inputs must be applied at the final consumer Cargo root.
 [features]
-owned-screen = ["dep:nddev-device-sync-domain", "dep:nddev-device-sync-application", "dep:rds-core", "dep:rds-net", "dep:rds-client", "dep:rds-desktop", "dep:anyhow", "dep:postcard", "dep:rand", "dep:iroh", "dep:tokio", "dep:tokio-util"]
+owned-screen = ["dep:nddev-device-sync-domain", "dep:nddev-device-sync-application", "dep:rds-core", "dep:rds-net", "dep:rds-client", "dep:rds-desktop", "dep:anyhow", "dep:postcard", "dep:rand", "dep:iroh", "dep:tokio", "dep:tokio-util", "dep:tracing"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 nddev-device-sync-domain = { version = "=0.0.12", git = "https://github.com/NDDev-Technocracy-OpenNetwork-NDS/nddev-device-sync-core.git", rev = "238dcec49849712758b6559facce70c2d226b42c", optional = true }
@@ -41,6 +41,7 @@ postcard = { version = "1", default-features = false, features = ["alloc"], opti
 rand = { version = "0.10", optional = true }
 tokio = { version = "=1.54.1", features = ["rt", "sync", "time"], optional = true }
 tokio-util = { version = "0.7", features = ["rt"], optional = true }
+tracing = { version = "0.1", optional = true }
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 x11rb = "0.14"

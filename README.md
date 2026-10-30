@@ -144,6 +144,8 @@ still be draining. Cancellation alone does not confirm cleanup.
 `BuiltinHost::serve` closes only its admitted connection on cancellation or
 expiry, then awaits the same serving operation and native capture. Keep that
 exact task and its Accounts purpose/key lease across an interrupted close wait.
+Receiver, heartbeat and retained decoder tasks carry the initiating tracing span
+and subscriber; the existing SDK remains the sole diagnostic delivery owner.
 An unresponsive native source keeps drain unresolved; it does not authorize
 releasing the old owner or starting a conflicting replacement.
 

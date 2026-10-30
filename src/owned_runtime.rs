@@ -27,6 +27,7 @@ use tokio::{
     time::Instant,
 };
 use tokio_util::sync::CancellationToken;
+use tracing::{Instrument, instrument::WithSubscriber};
 
 // Fail compilation with raw/older native inputs. Drain depends on the checked
 // provider implementation, even though the upstream Git/package identity stays
@@ -498,9 +499,11 @@ impl DecodeWork {
             return Err(error);
         }
         // Store before the first await: caller cancellation cannot detach it.
-        self.task = Some(tokio::spawn(super::decode_encoded(
-            decoder, header, payload,
-        )));
+        self.task = Some(tokio::spawn(
+            super::decode_encoded(decoder, header, payload)
+                .in_current_span()
+                .with_current_subscriber(),
+        ));
         self.finish().await?.ok_or(ScreenError::Closed)
     }
     async fn finish(&mut self) -> Result<Option<(RelayDecoder, RelayOutcome)>> {
@@ -626,32 +629,36 @@ impl NativeViewer {
                 state.stop(result.err().unwrap_or(ScreenError::Closed));
                 output.close();
                 closing.close(0u32.into(), b"owned view stopped");
-            });
+            }.in_current_span().with_current_subscriber());
             let state = life.clone();
             let closing = conn.clone();
             let output = frames.clone();
             let worker = decode.clone();
             #[cfg(test)]
             let fixture_control = control.clone();
-            let intake = tokio::spawn(async move {
-                let work = receiver(
-                    closing.clone(),
-                    route,
-                    state.clone(),
-                    output.clone(),
-                    control,
-                    initial,
-                    worker,
-                );
-                let result = tokio::select! {biased;
-                    _=state.cancel.cancelled()=>Err(ScreenError::Closed),
-                    _=tokio::time::sleep_until(state.deadline)=>Err(ScreenError::Expired),
-                    result=work=>result,
-                };
-                state.stop(result.err().unwrap_or(ScreenError::Closed));
-                output.close();
-                closing.close(0u32.into(), b"owned receive stopped");
-            });
+            let intake = tokio::spawn(
+                async move {
+                    let work = receiver(
+                        closing.clone(),
+                        route,
+                        state.clone(),
+                        output.clone(),
+                        control,
+                        initial,
+                        worker,
+                    );
+                    let result = tokio::select! {biased;
+                        _=state.cancel.cancelled()=>Err(ScreenError::Closed),
+                        _=tokio::time::sleep_until(state.deadline)=>Err(ScreenError::Expired),
+                        result=work=>result,
+                    };
+                    state.stop(result.err().unwrap_or(ScreenError::Closed));
+                    output.close();
+                    closing.close(0u32.into(), b"owned receive stopped");
+                }
+                .in_current_span()
+                .with_current_subscriber(),
+            );
             Ok(Self {
                 conn: conn.clone(),
                 life: life.clone(),
