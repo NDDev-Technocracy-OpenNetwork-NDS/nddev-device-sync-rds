@@ -207,12 +207,15 @@ def main():
             raise ValueError(f"lost consumer-root override: {name}")
     if Path(packages[node_for("netlink-packet-core", "0.8.2")["id"]]["manifest_path"]) != provider / "build/netlink-packet-core/Cargo.toml":
         raise ValueError("lost verified netlink overlay")
-    run(["cargo", "deny", "--manifest-path", str(consumer / "Cargo.toml"), "--metadata-path", str(output / "source-graph.json"), "--config", str(source / "deny.toml"), "--target", TARGET, "check"], cwd=consumer, env=env)
+    # --config here is cargo-deny's policy, not Cargo source configuration.
+    # The native entrypoint avoids a Cargo frontend consuming that flag while
+    # its exact precomputed metadata and prepared CARGO_HOME remain unchanged.
+    run(["cargo-deny", "--locked", "--manifest-path", str(consumer / "Cargo.toml"), "--metadata-path", str(output / "source-graph.json"), "--config", str(source / "deny.toml"), "--target", TARGET, "check"], cwd=consumer, env=env)
     run(["cargo", "audit", "--deny", "warnings", "--file", str(consumer / "Cargo.lock")], cwd=consumer, env=env)
     if digest(consumer / "Cargo.lock") != locked_sha256:
         raise ValueError("dependency tools changed the locked source graph")
-    run(cargo(["clippy", "--locked", "--offline", "--target", TARGET, "-j", "4", "--", "-D", "warnings"]), cwd=consumer, env=env)
-    compiled = subprocess.run(cargo(["build", "--locked", "--offline", "--target", TARGET, "-j", "4", "--message-format=json"]), cwd=consumer, env=env, text=True, stdout=subprocess.PIPE)
+    run(cargo(["clippy", "--locked", "--offline", "--target", TARGET, "--", "-D", "warnings"]), cwd=consumer, env=env)
+    compiled = subprocess.run(cargo(["build", "--locked", "--offline", "--target", TARGET, "--message-format=json"]), cwd=consumer, env=env, text=True, stdout=subprocess.PIPE)
     (output / "build.jsonl").write_text(compiled.stdout)
     artifacts = [json.loads(line) for line in compiled.stdout.splitlines() if line.startswith("{")]
     if compiled.returncode:

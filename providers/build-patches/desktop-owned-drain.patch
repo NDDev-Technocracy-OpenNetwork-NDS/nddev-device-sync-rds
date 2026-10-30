@@ -1,0 +1,92 @@
+--- a/crates/rds-desktop/src/session.rs
++++ b/crates/rds-desktop/src/session.rs
+@@ -1566,7 +1566,7 @@
+         }
+     };
+ 
+-    let result = tokio::select! {
++    let mut result = tokio::select! {
+         _ = control => Ok(()),
+         res = workers.join_next() => match res {
+             Some(Ok(())) | None => Ok(()),
+@@ -1575,8 +1575,29 @@
+     };
+     // Normal exit joins the asynchronous siblings. Cancellation during this
+     // shutdown still drops the JoinSet and aborts its remaining children.
+-    workers.shutdown().await;
++    workers.abort_all();
++    while let Some(joined) = workers.join_next().await {
++        if let Err(error) = joined
++            && !error.is_cancelled()
++            && result.is_ok()
++        {
++            result = Err(DesktopError::Io(std::io::Error::other(
++                "desktop worker failed",
++            )));
++        }
++    }
++    // Abort work which has not started, then positively join the running
++    // native capture. A closed connection or an aborted waiter cannot stop
++    // an X11 call already executing on a blocking worker.
+     capture.abort_all();
++    while let Some(joined) = capture.join_next().await {
++        if let Err(error) = joined
++            && !error.is_cancelled()
++            && result.is_ok()
++        {
++            result = Err(DesktopError::Capture("capture worker failed".into()));
++        }
++    }
+     result
+ }
+ 
+--- a/crates/rds-desktop/src/decode_work.rs
++++ b/crates/rds-desktop/src/decode_work.rs
+@@ -160,7 +160,7 @@
+     probe.mark(QUEUED);
+     let task_probe = probe.clone();
+     let parent = tracing::Span::current();
+-    let task = tokio::task::spawn_blocking(move || {
++    let mut task = tokio::task::spawn_blocking(move || {
+         let _entered = parent.enter();
+         let _slot = slot;
+         let cpu_started = cpu::now();
+@@ -182,7 +182,7 @@
+         result
+     });
+     caller.abort = Some(task.abort_handle());
+-    match tokio::time::timeout(timeout, task).await {
++    match tokio::time::timeout(timeout, &mut task).await {
+         Ok(Ok(result)) => Ok(result),
+         Ok(Err(error)) => {
+             caller.reason = "worker_failed";
+@@ -190,7 +190,14 @@
+         }
+         Err(_) => {
+             caller.reason = "work_timeout";
+-            Err(Error::Timeout)
++            // The deadline closes use of this result. It does not establish
++            // native completion. Cancel queued work and retain the same join
++            // until running codec work and its permit actually finish.
++            task.abort();
++            match task.await {
++                Err(error) if !error.is_cancelled() => Err(Error::Worker(error)),
++                _ => Err(Error::Timeout),
++            }
+         }
+     }
+ }
+--- a/crates/rds-desktop/src/lib.rs
++++ b/crates/rds-desktop/src/lib.rs
+@@ -19,6 +19,11 @@
+ use bytes::Bytes;
+ use rds_core::{Codec, DesktopCaps, InputEvent};
+ use thiserror::Error;
++
++/// Checked NDS source API: serving joins native capture and bounded decode
++/// retains its native worker through timeout. This version is a compatibility
++/// requirement, not an authorization grant or runtime acceptance receipt.
++pub const NDS_NATIVE_COMPLETION_REVISION: u32 = 1;
+ 
+ pub mod capture;
+ pub mod client;

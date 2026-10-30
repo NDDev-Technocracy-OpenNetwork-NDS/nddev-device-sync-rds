@@ -27,18 +27,29 @@ def files(root):
     return {p.relative_to(root).as_posix(): p for p in root.rglob("*") if p.is_file() or p.is_symlink()}
 
 
-def derive(original, destination, transform, expected_manifest, changed_file="Cargo.toml"):
+def derive(original, destination, transform, expected_manifest, changed_file="Cargo.toml", source_patches=()):
+    expected = {changed_file: expected_manifest}
+    for patch, changes in source_patches:
+        for change in changes:
+            relative = change["path"]
+            source = original / relative
+            require(not Path(relative).is_absolute() and ".." not in Path(relative).parts, "unsafe source patch path")
+            require(relative not in expected and source.is_file() and not source.is_symlink(), "invalid source patch target")
+            require(digest(source) == change["before_sha256"], "original source patch input mismatch")
+            expected[relative] = change["after_sha256"]
     if not destination.exists():
         shutil.copytree(original, destination, symlinks=True)
         manifest = destination / changed_file
         manifest.write_text(transform(manifest.read_text(encoding="utf-8")), encoding="utf-8", newline="\n")
+        for patch, _changes in source_patches:
+            subprocess.run(["git", "apply", "--whitespace=error", "--", str(patch)], cwd=destination, check=True)
     originals, derived = files(original), files(destination)
     require(originals.keys() == derived.keys(), "derived build has extra or missing source files")
     for relative, source in originals.items():
         target = derived[relative]
         require(target.resolve().is_relative_to(destination.resolve()), "unsafe derived source link")
-        if relative == changed_file:
-            require(digest(target) == expected_manifest, "derived manifest mismatch")
+        if relative in expected:
+            require(not target.is_symlink() and digest(target) == expected[relative], "derived source patch mismatch")
         elif source.is_symlink():
             require(target.is_symlink() and source.readlink() == target.readlink(), "derived source link mismatch")
         else:
@@ -85,6 +96,13 @@ def prepare(root):
     repo = Path(__file__).resolve().parents[1]
     spec = json.loads((repo / "providers/screen-build.lock.json").read_text())
     source_spec = json.loads((repo / "providers/screen-source.lock.json").read_text())
+    require(spec["schema_version"] == 2, "unsupported build input schema")
+    source_patches = []
+    for entry in spec["source_patches"]:
+        patch = repo / entry["patch"]
+        require(entry["upstream_commit"] == spec["upstream_commit"], "source patch pin mismatch")
+        require(digest(patch) == entry["patch_sha256"], "source patch digest mismatch")
+        source_patches.append((patch, entry["files"]))
     require(spec["upstream_commit"] == source_spec["source_commit"], "build source pin mismatch")
     module_spec = spec_from_file_location("provider", repo / "scripts/prepare-screen-provider.py")
     provider = module_from_spec(module_spec)
@@ -105,7 +123,7 @@ def prepare(root):
 
     build = root / "build"
     build.mkdir(mode=0o700, exist_ok=True)
-    derive(original, build / "engine", versions, workspace["after_sha256"])
+    derive(original, build / "engine", versions, workspace["after_sha256"], source_patches=source_patches)
     archives = root / "registry-inputs"
     archives.mkdir(mode=0o700, exist_ok=True)
     netlink = spec["netlink"]

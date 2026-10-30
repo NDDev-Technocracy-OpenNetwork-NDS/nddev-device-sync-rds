@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "upstream_commit": "2761dbdb76baee0edc2557b02ac7a90472312ab7",
   "toolchain": "1.99.1",
   "target": "x86_64-unknown-linux-gnu",
@@ -25,5 +25,31 @@
     "version": "0.2.3",
     "archive_sha256": "2ee67f1008b1ba2321834326597b8e186293b049a023cdef258527550b9935b4",
     "archive_size": 20361
-  }
+  },
+  "source_patches": [
+    {
+      "patch": "providers/build-patches/desktop-owned-drain.patch",
+      "patch_sha256": "c6d9f64e132cfacad7b9d4ba01b9950e3dc2bea45c9b62920ca87023dc1ded6c",
+      "upstream_commit": "2761dbdb76baee0edc2557b02ac7a90472312ab7",
+      "license": "AGPL-3.0-only",
+      "purpose": "retain and join actual native capture/codec completion; no wire, identity or authority change",
+      "files": [
+        {
+          "path": "crates/rds-desktop/src/session.rs",
+          "before_sha256": "5440a63be4de0a069ac996376dfa8975ae28000b099a31a0fb823950292c07ab",
+          "after_sha256": "d6552ddd35afc27e9b97b4eb937cbff939a3bc92314de174d931d4b99e97bc5c"
+        },
+        {
+          "path": "crates/rds-desktop/src/decode_work.rs",
+          "before_sha256": "a567a3a2ea5af808e53d529723d5de8db75a00eb2522446ce8823163c667ccca",
+          "after_sha256": "e80db7092ee530602cf36dc22ce24beca1c1a9cd4c54164ffe299ecdf5e5a42a"
+        },
+        {
+          "path": "crates/rds-desktop/src/lib.rs",
+          "before_sha256": "793744db3e2fc5f2312e699ca48a4b4e5a1268c9c790fdfd198872d6f326bfbf",
+          "after_sha256": "e2d5b84a560fe619d9ddb53e66baa772208622e4a75172df484d4ecab60610ca"
+        }
+      ]
+    }
+  ]
 }
