@@ -64,6 +64,9 @@ It checks cancellation, expiry, retained packets, one-use endpoint signatures an
 bounded binary/text WebSocket queues. The checked transport overlay caps its Rust
 receive queue at eight messages of at most 1 MiB; browser-owned buffers have their
 own lifetime. The loopback HTTP/WS fixture is not production HTTPS/WSS acceptance.
+Use `--prepare-only` to derive the checked native/WASM consumer inputs for lock
+review without running a compiler or browser. Preparation is not acceptance; the
+full fixture requires its explicit native browser inputs and retains the sandbox.
 Its ephemeral keys and fixture grants do not establish NDS device authorization
 or native trust. This code is a qualification input, not an exported NDS browser
 viewer. Other browsers, Wayland and other native platforms remain unqualified.

@@ -20,10 +20,13 @@ def main():
     parser.add_argument("--domain", type=Path, required=True)
     parser.add_argument("--provider-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--wasm-bindgen", type=Path, required=True)
-    parser.add_argument("--playwright-module", type=Path, required=True)
-    parser.add_argument("--browser", type=Path, required=True)
+    parser.add_argument("--wasm-bindgen", type=Path)
+    parser.add_argument("--playwright-module", type=Path)
+    parser.add_argument("--browser", type=Path)
+    parser.add_argument("--prepare-only", action="store_true", help="derive checked consumer inputs only; no compiler or browser runs")
     args = parser.parse_args()
+    if not args.prepare_only and any(value is None for value in (args.wasm_bindgen, args.playwright_module, args.browser)):
+        parser.error("browser execution requires --wasm-bindgen, --playwright-module and --browser")
     repo = Path(__file__).resolve().parents[1]
     toolchain = tomllib.loads((repo / "rust-toolchain.toml").read_text())["toolchain"]["channel"]
     output = args.output.resolve()
@@ -72,6 +75,10 @@ def main():
     (fixture / "src/main.rs").write_text(f'include!({quote(repo / "qualification/browser/fixture.rs")});\n')
     for project, filename in [(client, "client.Cargo.lock"), (fixture, "fixture.Cargo.lock")]:
         shutil.copyfile(repo / "qualification/browser" / filename, project / "Cargo.lock")
+    if args.prepare_only:
+        print(json.dumps({"status": "prepared", "client": str(client), "fixture": str(fixture),
+                          "scope": "checked consumer inputs only; no compile, browser or runtime acceptance"}))
+        return
     env = dict(os.environ, RUSTUP_TOOLCHAIN=toolchain)
     client_env = dict(env, CARGO_TARGET_DIR=str(output / "wasm-target"))
     native_env = dict(env, CARGO_TARGET_DIR=str(output / "native-target"))
