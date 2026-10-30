@@ -22,6 +22,12 @@ spec:
     via: Cargo.toml
   - contract: nddev-device-sync-core/domain
     via: Cargo.toml
+  - contract: nddev-device-sync-core/application
+    via: Cargo.toml
+  provides:
+  - name: owned-screen
+    source: src/owned.rs
+    direction: code-first
   variations:
   - paths: [.gds]
     purpose: config

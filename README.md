@@ -1,8 +1,19 @@
 # NDDev OpenNetwork · rds
 
-AGPL-3.0-only NDS adapter. [NDDev OpenNetwork](https://nddev.ai).
+AGPL-3.0-only NDS remote-display module. [NDDev OpenNetwork](https://nddev.ai).
 
-Read the native manager identity, selection and live sessions through its keyless CLI. No key creation, session mutation, desktop rendering or transport replacement is exposed.
+The opt-in Linux `owned-screen` library supplies an X11 host and native H264
+receiver over encrypted, exact-peer sessions. The existing NdsClient supplies
+Accounts authorization, endpoint-key ownership, original scope and presentation.
+A separately installed archived desktop executable is not required by this path.
+The default API observes the existing native manager's identity, selection and
+live sessions through its keyless CLI, without changing that manager or its state.
+
+Viewing is the alpha boundary. Remote input, shell, clipboard, file transfer and
+audio are not exposed by the owned screen API. Wayland, macOS and Windows capture
+are unsupported here. Linux library/subsystem qualification, actual
+Accounts-authenticated NDS viewing and each platform's presentation remain
+separate gates; the browser fixture below is not an exported Web viewer.
 
 `contracts/module.json` is the canonical compiled-in runtime descriptor;
 `module.yaml` identifies its repository package. Caller-owned local/process
@@ -21,7 +32,10 @@ and GitHub-hosted runner with `gh attestation verify --bundle`. The signing
 repository remains the identity recorded when the release was issued; verification
 does not depend on GitHub retaining its attestation API entry after a transfer.
 
-Screen integration is being qualified separately from the exported read-only API.
+The issued `0.1.0` compatibility binaries exclude desktop features. Their
+provenance does not qualify the source-built host or receiver.
+
+Screen integration has separate gates from the default read-only API.
 `src/screen.rs` consumes the core-owned `screen` contract; it exposes no input or
 clipboard operations. `scripts/check-screen.py --help` describes the explicit
 core/provider inputs and private output directory. It verifies the desktop source
@@ -59,6 +73,16 @@ the checked source preparer and emits one consumer-root Cargo override file.
 An optional `--archive` accepts the exact published provider source archive.
 Generated inputs/config stay outside this repository. Consumers supply CONFIG
 to every top-level Cargo command; dependency-local patches are ignored by Cargo.
+The build-input lock also identifies a small AGPL-3.0-only desktop source overlay.
+It joins active native capture and codec work before reporting their completion;
+the original source archive, Git revision and release signer remain unchanged.
+The owned receiver requires its native completion API revision at compile time,
+so raw or older prepared provider inputs cannot silently satisfy this path.
+Every changed source file has exact before/after digests. Preparation checks the
+entire derived tree and rejects unrelated edits or reuse of older prepared inputs.
+Use the selected SDK's preparer in a fresh admitted input directory; an old
+consumer config does not adopt a new source overlay.
+
 Checked manifests disable unused Postcard heapless/CAS defaults while retaining
 the native alloc/std serialization APIs and wire types. Advisory gates reject
 maintenance warnings as well as known vulnerabilities.
@@ -112,9 +136,27 @@ Normal unchanged idle uses the existing heartbeat and IDR refresh.
 
 `NativeViewer::close` borrows the viewer while joining its owned tasks. A caller
 may bound that wait; cancellation retains unfinished handles and any observed
-join failure. Keep the viewer until `is_drained()` confirms every handle has
-completed, and preserve the returned close error. Cancellation alone does not
-confirm cleanup.
+join failure. Keep the viewer until `is_drained()` confirms both its receiver tasks and the
+retained native decoder operation have completed, and preserve the returned
+close error. A receive deadline stops pixel publication while a native call may
+still be draining. Cancellation alone does not confirm cleanup.
+
+`BuiltinHost::serve` closes only its admitted connection on cancellation or
+expiry, then awaits the same serving operation and native capture. Keep that
+exact task and its Accounts purpose/key lease across an interrupted close wait.
+An unresponsive native source keeps drain unresolved; it does not authorize
+releasing the old owner or starting a conflicting replacement.
+
+On an admitted native Linux executor, prepare the checked Cargo environment
+above and set `NDS_RECEIVER_RESULTS` and `NDS_HOST_DRAIN_RESULTS` to separate
+files in the owned qualification output directory, then run
+`just owned-screen-check`. It uses separate private Xvfb lifetimes for the
+receiver and host-drain scenarios. The latter pauses only its retained fixture
+process, checks that cancellation/expiry cannot acknowledge capture drain while
+that source is stopped, then resumes it and joins before endpoint cleanup.
+The retained-job unit regression checks cancellation ordering and failure
+retention; it is not a physical codec acceptance claim. Run the actual native
+and downstream SDK gates for the selected source before adoption.
 
 The separate `owned-screen-linux` CI gate runs the receiver subsystem on its own
 Xvfb, generated native keys and passive Core projection. The fixture test is

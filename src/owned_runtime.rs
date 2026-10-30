@@ -28,6 +28,11 @@ use tokio::{
 };
 use tokio_util::sync::CancellationToken;
 
+// Fail compilation with raw/older native inputs. Drain depends on the checked
+// provider implementation, even though the upstream Git/package identity stays
+// fixed. A source marker never substitutes for real host/codec qualification.
+const _: () = assert!(rds_desktop::NDS_NATIVE_COMPLETION_REVISION == 1);
+
 pub(crate) fn wall_now() -> Result<u64> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -79,16 +84,18 @@ impl BuiltinHost {
     /// loss cancels it, then joins it, before releasing endpoint/key ownership.
     pub async fn serve(self, cancel: CancellationToken) -> Result<()> {
         let life = Life::new(self.ready.permit().lease, cancel.clone())?;
+        // Before capture starts, accept/handshake can be cancelled directly.
+        // Once serving owns native work, its exact task must complete the drain.
         let accepting = async {
             let incoming = self.endpoint.accept().await.ok_or(ScreenError::Closed)?;
-            let conn = incoming.await.map_err(unavailable)?;
-            serve_builtin_x11(conn, self.ready, self.caps, cancel.clone()).await
+            incoming.await.map_err(unavailable)
         };
-        tokio::select! { biased;
-            _ = cancel.cancelled() => Ok(()),
-            _ = tokio::time::sleep_until(life.deadline) => { cancel.cancel(); Ok(()) },
-            result = accepting => result,
-        }
+        let conn = tokio::select! { biased;
+            _ = cancel.cancelled() => return Ok(()),
+            _ = tokio::time::sleep_until(life.deadline) => { cancel.cancel(); return Ok(()) },
+            result = accepting => result?,
+        };
+        serve_builtin_x11(conn, self.ready, self.caps, cancel).await
     }
 }
 
@@ -254,10 +261,22 @@ pub async fn serve_builtin_x11(
         .map_err(desktop_error)?;
         Ok(())
     };
-    tokio::select! { biased;
-        _ = life.cancel.cancelled() => Ok(()),
-        _ = tokio::time::sleep_until(life.deadline) => { life.cancel.cancel(); Ok(()) },
-        result = work => result,
+    tokio::pin!(work);
+    let result = tokio::select! { biased;
+        _ = life.cancel.cancelled() => None,
+        _ = tokio::time::sleep_until(life.deadline) => { life.cancel.cancel(); None },
+        result = &mut work => Some(result),
+    };
+    if let Some(result) = result {
+        return result;
+    }
+    // Closing only this admitted connection wakes its control/writer tasks.
+    // The checked provider joins its running native capture before returning.
+    // The parent retains this task if a bounded close wait is interrupted.
+    conn.close(0u32.into(), b"owned host stopping");
+    match work.await {
+        Ok(()) | Err(ScreenError::Closed) => Ok(()),
+        error => error,
     }
 }
 
@@ -360,6 +379,7 @@ async fn receiver(
     frames: Arc<Frames>,
     control: Arc<Mutex<SendStream>>,
     mut empty_at: Instant,
+    decode: Arc<Mutex<DecodeWork>>,
 ) -> Result<()> {
     use std::{
         future::{Future, poll_fn},
@@ -421,7 +441,7 @@ async fn receiver(
             let chain = decoder.take().ok_or(ScreenError::Closed)?;
             #[cfg(test)]
             tests::DECODES.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            let (chain, outcome) = super::decode_encoded(chain, header, payload).await?;
+            let (chain, outcome) = decode.lock().await.decode(chain, header, payload).await?;
             decoder = Some(chain);
             #[cfg(test)]
             tests::qualification_pause(true).await;
@@ -458,12 +478,65 @@ async fn receiver(
     }
 }
 
+// A receive deadline may drop its local wait, while this owner retains the
+// exact decoder task. The provider's original global native budget remains in
+// force; no replacement decoder or late output is admitted during cleanup.
+#[derive(Default)]
+struct DecodeWork {
+    task: Option<JoinHandle<Result<(RelayDecoder, RelayOutcome)>>>,
+    failure: Option<ScreenError>,
+}
+impl DecodeWork {
+    async fn decode(
+        &mut self,
+        decoder: RelayDecoder,
+        header: rds_core::FrameHeader,
+        payload: Vec<u8>,
+    ) -> Result<(RelayDecoder, RelayOutcome)> {
+        require(self.task.is_none(), ScreenError::Module(ModuleError::Busy))?;
+        if let Some(error) = self.failure {
+            return Err(error);
+        }
+        // Store before the first await: caller cancellation cannot detach it.
+        self.task = Some(tokio::spawn(super::decode_encoded(
+            decoder, header, payload,
+        )));
+        self.finish().await?.ok_or(ScreenError::Closed)
+    }
+    async fn finish(&mut self) -> Result<Option<(RelayDecoder, RelayOutcome)>> {
+        let Some(task) = self.task.as_mut() else {
+            return self.failure.map_or(Ok(None), Err);
+        };
+        let result = task.await;
+        self.task.take();
+        match result {
+            Ok(Ok(output)) => Ok(Some(output)),
+            result => {
+                let error = match result {
+                    Ok(Err(error)) => error,
+                    _ => ScreenError::Module(ModuleError::ProviderFailed),
+                };
+                self.failure.get_or_insert(error);
+                Err(error)
+            }
+        }
+    }
+    async fn close(&mut self) -> Result<()> {
+        // A completion is consumed solely for drain; its pixels never reach UI.
+        self.finish().await.map(|_| ())
+    }
+}
+
 pub struct NativeViewer {
     conn: Connection,
     life: Arc<Life>,
     frames: Arc<Frames>,
     tasks: Vec<JoinHandle<()>>,
     drain_error: Option<ScreenError>,
+    decode: Arc<Mutex<DecodeWork>>,
+    decode_drained: bool,
+    #[cfg(test)]
+    control: Arc<Mutex<SendStream>>,
 }
 impl NativeViewer {
     pub async fn open(
@@ -508,6 +581,7 @@ impl NativeViewer {
             life.check()?;
             let control = Arc::new(Mutex::new(send));
             let frames = Frames::new();
+            let decode = Arc::new(Mutex::new(DecodeWork::default()));
             let background = control.clone();
             let state = life.clone();
             let closing = conn.clone();
@@ -556,6 +630,9 @@ impl NativeViewer {
             let state = life.clone();
             let closing = conn.clone();
             let output = frames.clone();
+            let worker = decode.clone();
+            #[cfg(test)]
+            let fixture_control = control.clone();
             let intake = tokio::spawn(async move {
                 let work = receiver(
                     closing.clone(),
@@ -564,6 +641,7 @@ impl NativeViewer {
                     output.clone(),
                     control,
                     initial,
+                    worker,
                 );
                 let result = tokio::select! {biased;
                     _=state.cancel.cancelled()=>Err(ScreenError::Closed),
@@ -580,6 +658,10 @@ impl NativeViewer {
                 frames,
                 drain_error: None,
                 tasks: vec![heartbeat, intake],
+                decode,
+                decode_drained: false,
+                #[cfg(test)]
+                control: fixture_control,
             })
         };
         let result = tokio::select! {biased;
@@ -646,11 +728,17 @@ impl NativeViewer {
     /// A caller may bound its wait; cancellation leaves unfinished handles here.
     pub async fn close(&mut self) -> Result<()> {
         self.cancel();
-        drain_tasks(&mut self.tasks, &mut self.drain_error).await
+        let _ = drain_tasks(&mut self.tasks, &mut self.drain_error).await;
+        let result = self.decode.lock().await.close().await;
+        self.decode_drained = true;
+        if self.drain_error.is_none() {
+            self.drain_error = result.err();
+        }
+        self.drain_error.map_or(Ok(()), Err)
     }
     /// True only after every task handle has produced its terminal result.
     pub fn is_drained(&self) -> bool {
-        self.tasks.is_empty()
+        self.tasks.is_empty() && self.decode_drained
     }
 }
 async fn drain_tasks(
@@ -716,6 +804,34 @@ mod tests {
             drain_tasks(&mut tasks, &mut failure).await,
             Err(ScreenError::Module(ModuleError::ProviderFailed))
         ));
+    }
+
+    #[tokio::test]
+    async fn decoder_drain_keeps_the_exact_job_and_failure_after_interrupted_wait() {
+        let (release, held) = tokio::sync::oneshot::channel::<()>();
+        let mut decode = DecodeWork {
+            task: Some(tokio::spawn(async move {
+                let _ = held.await;
+                Err(ScreenError::Module(ModuleError::ProviderFailed))
+            })),
+            failure: None,
+        };
+        assert!(
+            tokio::time::timeout(Duration::from_millis(10), decode.close())
+                .await
+                .is_err()
+        );
+        assert!(decode.task.is_some());
+        release.send(()).unwrap();
+        assert_eq!(
+            decode.close().await,
+            Err(ScreenError::Module(ModuleError::ProviderFailed))
+        );
+        assert!(decode.task.is_none());
+        assert_eq!(
+            decode.close().await,
+            Err(ScreenError::Module(ModuleError::ProviderFailed))
+        );
     }
 
     use nddev_device_sync_domain::{
@@ -903,8 +1019,10 @@ mod tests {
         let cancel = CancellationToken::new();
         let stop = cancel.clone();
         let task = tokio::spawn(async move {
-            let conn = serving.accept().await.unwrap().await.unwrap();
-            serve_builtin_x11(conn, model, caps, stop).await
+            BuiltinHost::new(serving, model, caps)
+                .unwrap()
+                .serve(stop)
+                .await
         });
         let live = NativeViewer::open(
             &viewer,
@@ -917,6 +1035,110 @@ mod tests {
         .unwrap();
         (host, viewer, live, cancel, task)
     }
+    // owned-x11.py retains this exact Popen child without reaping it during
+    // acceptance. This fixture never signals an ambient display or reused PID.
+    struct PausedSource {
+        pid: String,
+        active: bool,
+    }
+    impl PausedSource {
+        fn pause() -> Self {
+            assert_eq!(std::env::var("NDS_OWNED_XVFB").as_deref(), Ok("1"));
+            let pid = std::env::var("NDS_OWNED_XVFB_PID").unwrap();
+            assert!(pid.parse::<u32>().unwrap() > 1);
+            assert!(
+                std::process::Command::new("kill")
+                    .args(["-STOP", "--", &pid])
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+            Self { pid, active: true }
+        }
+        fn resume(&mut self) {
+            assert!(
+                std::process::Command::new("kill")
+                    .args(["-CONT", "--", &self.pid])
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+            self.active = false;
+        }
+    }
+    impl Drop for PausedSource {
+        fn drop(&mut self) {
+            if self.active {
+                let _ = std::process::Command::new("kill")
+                    .args(["-CONT", "--", &self.pid])
+                    .status();
+            }
+            // The Python fixture also unconditionally resumes and joins its
+            // exact source on failed assertions; no successful drain is inferred.
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    #[ignore = "requires the explicit owned Xvfb host-drain gate"]
+    async fn actual_builtin_host_retains_capture_until_cancel_or_expiry_drains() {
+        let paint = Paint::new();
+        let mut outcomes = Vec::new();
+        for expiry in [false, true] {
+            let (host, viewer, mut live, cancel, mut task) =
+                view(if expiry { 3 } else { 60 }).await;
+            let mut frame = live.pull_frame().await.unwrap();
+            assert!(frame.read_once().unwrap()[2] > 180);
+            drop(frame);
+            let mut source = PausedSource::pause();
+            // Send the existing view-only encoder control over the actual
+            // live stream; capture must query the stopped X11 source for IDR.
+            idr(&live.control).await.unwrap();
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            if expiry {
+                tokio::time::sleep_until(live.life.deadline + Duration::from_millis(100)).await;
+            } else {
+                cancel.cancel();
+            }
+            let started = Instant::now();
+            assert!(
+                tokio::time::timeout(Duration::from_millis(150), &mut task)
+                    .await
+                    .is_err(),
+                "host cannot acknowledge native drain while its X server is stopped"
+            );
+            let retained_ms = started.elapsed().as_millis();
+            source.resume();
+            tokio::time::timeout(Duration::from_secs(5), &mut task)
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+            // The source is still owned and responsive. Endpoint/key cleanup
+            // follows the exact capture join, not a process-wide endpoint close.
+            live.close().await.unwrap();
+            assert!(live.is_drained());
+            host.close().await;
+            viewer.close().await;
+            outcomes.push(serde_json::json!({
+                "stop": if expiry { "lease_expiry" } else { "cancellation" },
+                "retained_wait_ms": retained_ms,
+                "host_joined_after_exact_source_resumed": true,
+                "endpoint_close_after_host_join": true,
+                "first_frame": "actual X11 known red pixels through native encrypted session and H264 decode"
+            }));
+        }
+        drop(paint);
+        std::fs::write(
+            std::env::var("NDS_HOST_DRAIN_RESULTS").unwrap(),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "passed": true,
+                "cases": outcomes,
+                "scope": "owned Linux Xvfb native host/receiver drain; no Accounts-authenticated product or ambient desktop",
+                "source_overlay": "providers/build-patches/desktop-owned-drain.patch"
+            })).unwrap(),
+        ).unwrap();
+    }
+
     #[derive(Clone, Copy, Debug)]
     enum Fault {
         Tag,
@@ -1212,6 +1434,6 @@ mod tests {
         close(host, viewer, live, cancel, task).await;
         outcomes.push(serde_json::json!({"unpolled_lease_expiry":true,"held_output_denied":true}));
         let path = std::env::var("NDS_RECEIVER_RESULTS").unwrap();
-        std::fs::write(path,serde_json::to_vec_pretty(&serde_json::json!({"passed":true,"cases":outcomes,"clock":"conservative local observed-empty accept boundary; no sender/receiver clock subtraction","scope":"real native source/grant/transport/decoder subsystem; no fake authenticated NDS principal","provider_modified":false,"fixture_pause":"cfg(test) delays before raw accept/before actual native decode/after actual native decode; real transport fragmentation at tag/header/body; no fake decoder success","startup_limit":"initial causal anchor before greeting can conservatively shorten nominal five-second startup to three seconds; unchanged idle separately passes"})).unwrap()).unwrap();
+        std::fs::write(path,serde_json::to_vec_pretty(&serde_json::json!({"passed":true,"cases":outcomes,"clock":"conservative local observed-empty accept boundary; no sender/receiver clock subtraction","scope":"real native source/grant/transport/decoder subsystem; no fake authenticated NDS principal","provider_modified_by_fixture":false,"checked_source_overlay":"providers/build-patches/desktop-owned-drain.patch","fixture_pause":"cfg(test) delays before raw accept/before actual native decode/after actual native decode; real transport fragmentation at tag/header/body; no fake decoder success","startup_limit":"initial causal anchor before greeting can conservatively shorten nominal five-second startup to three seconds; unchanged idle separately passes"})).unwrap()).unwrap();
     }
 }

@@ -381,13 +381,13 @@ pub async fn decode_encoded(
         payload.len() <= MAX_ENCODED_FRAME_BYTES && !payload.is_empty(),
         ScreenError::FrameLimit,
     )?;
-    let (decoder, outcome) = tokio::time::timeout(
-        Duration::from_secs(3),
-        decoder.push_bounded(header, payload),
-    )
-    .await
-    .map_err(timeout)?
-    .map_err(desktop_error)?;
+    // The checked provider's deadline seals the result, then waits for native
+    // completion. Owned receiver cancellation retains this operation in
+    // DecodeWork; a timeout cannot be mistaken for a completed native drain.
+    let (decoder, outcome) = decoder
+        .push_bounded(header, payload)
+        .await
+        .map_err(desktop_error)?;
     if let rds_desktop::client::RelayOutcome::Frame(frame) = &outcome {
         frame_layout(frame.width, frame.height, frame.stride, frame.data.len())?;
     }

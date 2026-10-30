@@ -18,10 +18,11 @@ classification:
   visibility_contract: "public"
   data_classification: "public"
 product:
-  purpose: "AGPL-3.0-only NDS adapter. Reads the native RDS manager identity, selection and live sessions through its keyless CLI; no key creation, session mutation, desktop rendering or transport replacement is exposed."
+  purpose: "AGPL-3.0-only NDS remote-display module with an opt-in Linux X11 host and native H264 receiver. Existing kernel consumers own authorization and presentation; the default compatibility API only observes the native manager."
   capabilities:
     - "Read-only RDS manager identity and live session observation"
     - "Keyless CLI boundary with no session mutation"
+    - "Opt-in Linux view-only host/receiver library with owned native drain; target qualification remains separate"
 policy:
   profiles:
     - "repository-default"
