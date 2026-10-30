@@ -2,12 +2,14 @@
 import copy
 import difflib
 import hashlib
+import os
 import tempfile
 import importlib.util
 from pathlib import Path
 import sys
 import tomllib
 import unittest
+from unittest import mock
 
 sys.dont_write_bytecode = True
 spec = importlib.util.spec_from_file_location("qualification", Path(__file__).with_name("check-library.py"))
@@ -87,6 +89,13 @@ class CheckedSourcePatches(unittest.TestCase):
         self.assertEqual((self.destination / "native.rs").read_text(), "joined native body\n")
         self.assertEqual((self.destination / "retained.rs").read_bytes(), (self.original / "retained.rs").read_bytes())
         self.assertEqual((self.original / "native.rs").read_text(), "original native body\n")
+
+    def test_native_source_bytes_ignore_host_line_ending_policy(self):
+        with mock.patch.dict(os.environ, {"GIT_CONFIG_COUNT": "1",
+                                         "GIT_CONFIG_KEY_0": "core.autocrlf",
+                                         "GIT_CONFIG_VALUE_0": "true"}):
+            self.derive()
+        self.assertEqual((self.destination / "native.rs").read_bytes(), b"joined native body\n")
 
     def test_changed_original_is_refused_before_creating_derived_source(self):
         (self.original / "native.rs").write_text("different native source\n")
