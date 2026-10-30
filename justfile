@@ -1,5 +1,9 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
+# List operations without building or preparing inputs.
+default:
+    @just --list
+
 check:
     python3 -B -m unittest discover -s scripts -p test_library.py
     cargo fmt -- --check

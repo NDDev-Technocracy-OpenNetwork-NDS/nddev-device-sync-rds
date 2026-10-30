@@ -9,10 +9,22 @@
          _ = control => Ok(()),
          res = workers.join_next() => match res {
              Some(Ok(())) | None => Ok(()),
-@@ -1576,7 +1576,18 @@
+@@ -1575,8 +1575,29 @@
+     };
      // Normal exit joins the asynchronous siblings. Cancellation during this
      // shutdown still drops the JoinSet and aborts its remaining children.
-     workers.shutdown().await;
+-    workers.shutdown().await;
++    workers.abort_all();
++    while let Some(joined) = workers.join_next().await {
++        if let Err(error) = joined
++            && !error.is_cancelled()
++            && result.is_ok()
++        {
++            result = Err(DesktopError::Io(std::io::Error::other(
++                "desktop worker failed",
++            )));
++        }
++    }
 +    // Abort work which has not started, then positively join the running
 +    // native capture. A closed connection or an aborted waiter cannot stop
 +    // an X11 call already executing on a blocking worker.

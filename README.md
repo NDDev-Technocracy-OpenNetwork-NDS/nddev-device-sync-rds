@@ -20,7 +20,7 @@ separate gates; the browser fixture below is not an exported Web viewer.
 capability handles share a bounded agent admission budget. Native responses,
 private paths and content are never Debug or telemetry payloads.
 
-Run `just check`, then `just provider-check` with the explicit `NDS_TEST_*`
+Run `just` for command discovery. Run `just check`, then `just provider-check` with the explicit `NDS_TEST_*`
 provider paths used by CI. Acceptance exercises the real pinned native owner
 in isolated temporary state. Linux provider acceptance and portable source
 checks are distinct; an absent provider is unavailable, not a successful stub.
