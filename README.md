@@ -67,6 +67,9 @@ own lifetime. The loopback HTTP/WS fixture is not production HTTPS/WSS acceptanc
 Use `--prepare-only` to derive the checked native/WASM consumer inputs for lock
 review without running a compiler or browser. Preparation is not acceptance; the
 full fixture requires its explicit native browser inputs and retains the sandbox.
+`--build-only` compiles the native fixture and WASM assets, records actual Cargo
+artifact paths and digests, and exits before browser execution. This supports a
+separate native display/browser job using the existing owned fixture driver.
 Its ephemeral keys and fixture grants do not establish NDS device authorization
 or native trust. This code is a qualification input, not an exported NDS browser
 viewer. Other browsers, Wayland and other native platforms remain unqualified.
