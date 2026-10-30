@@ -210,7 +210,7 @@ def main():
     # --config here is cargo-deny's policy, not Cargo source configuration.
     # The native entrypoint avoids a Cargo frontend consuming that flag while
     # its exact precomputed metadata and prepared CARGO_HOME remain unchanged.
-    run(["cargo-deny", "--manifest-path", str(consumer / "Cargo.toml"), "--metadata-path", str(output / "source-graph.json"), "--config", str(source / "deny.toml"), "--target", TARGET, "check"], cwd=consumer, env=env)
+    run(["cargo-deny", "--locked", "--manifest-path", str(consumer / "Cargo.toml"), "--metadata-path", str(output / "source-graph.json"), "--config", str(source / "deny.toml"), "--target", TARGET, "check"], cwd=consumer, env=env)
     run(["cargo", "audit", "--deny", "warnings", "--file", str(consumer / "Cargo.lock")], cwd=consumer, env=env)
     if digest(consumer / "Cargo.lock") != locked_sha256:
         raise ValueError("dependency tools changed the locked source graph")

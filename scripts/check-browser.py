@@ -82,7 +82,7 @@ def main():
     for project, target, build_env in [(client, "wasm32-unknown-unknown", client_env), (fixture, "x86_64-unknown-linux-gnu", native_env)]:
         metadata = subprocess.check_output(["rustup", "run", toolchain, "cargo", "metadata", "--manifest-path", str(project / "Cargo.toml"), "--locked", "--format-version", "1", "--filter-platform", target], env=build_env)
         (project / "compiled-graph.json").write_bytes(metadata)
-        run(["cargo", "deny", "--manifest-path", str(project / "Cargo.toml"), "--config", str(repo / "deny.toml"), "--target", target, "check"], env=build_env)
+        run(["cargo-deny", "--locked", "--manifest-path", str(project / "Cargo.toml"), "--config", str(repo / "deny.toml"), "--target", target, "check"], env=build_env)
         run(["cargo", "audit", "--deny", "warnings", "--file", str(project / "Cargo.lock")], env=build_env)
         run(["rustup", "run", toolchain, "cargo", "clippy", "--manifest-path", str(project / "Cargo.toml"), "--locked", "--target", target, "--", "-D", "warnings"], env=build_env)
         compiled = subprocess.run(["rustup", "run", toolchain, "cargo", "build", "--manifest-path", str(project / "Cargo.toml"), "--locked", "--target", target, "--message-format=json", "-j", "4"], env=build_env, text=True, stdout=subprocess.PIPE)

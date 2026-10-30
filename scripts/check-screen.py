@@ -91,7 +91,7 @@ def main():
     resolved_macro = [p for p in lock["package"] if p["name"] == macro["name"] and p["version"] == macro["version"]]
     if len(resolved_macro) != 1 or resolved_macro[0]["checksum"] != macro["archive_sha256"]:
         raise ValueError("compiled macro dependency differs from verified artifact")
-    run(["cargo", "deny", "--manifest-path", str(output / "Cargo.toml"), "--config", str(repo / "deny.toml"), "--target", target, "check"], cwd=output, env=env)
+    run(["cargo-deny", "--locked", "--manifest-path", str(output / "Cargo.toml"), "--config", str(repo / "deny.toml"), "--target", target, "check"], cwd=output, env=env)
     run(["cargo", "audit", "--deny", "warnings", "--file", str(output / "Cargo.lock")], cwd=output, env=env)
     clippy = subprocess.run(["cargo", "clippy", "--locked", "--all-targets", "--target", target, "--message-format=json", "-j", "4", "--", "-D", "warnings"], cwd=output, env=env, text=True, stdout=subprocess.PIPE)
     (output / "clippy.jsonl").write_text(clippy.stdout)
