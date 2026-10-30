@@ -93,7 +93,7 @@ def main():
         raise ValueError("compiled macro dependency differs from verified artifact")
     run(["cargo-deny", "--locked", "--manifest-path", str(output / "Cargo.toml"), "--config", str(repo / "deny.toml"), "--target", target, "check"], cwd=output, env=env)
     run(["cargo", "audit", "--deny", "warnings", "--file", str(output / "Cargo.lock")], cwd=output, env=env)
-    clippy = subprocess.run(["cargo", "clippy", "--locked", "--all-targets", "--target", target, "--message-format=json", "-j", "4", "--", "-D", "warnings"], cwd=output, env=env, text=True, stdout=subprocess.PIPE)
+    clippy = subprocess.run(["cargo", "clippy", "--locked", "--all-targets", "--target", target, "--message-format=json", "--", "-D", "warnings"], cwd=output, env=env, text=True, stdout=subprocess.PIPE)
     (output / "clippy.jsonl").write_text(clippy.stdout)
     artifacts = [json.loads(line) for line in clippy.stdout.splitlines() if line.startswith("{")]
     if clippy.returncode:
@@ -104,7 +104,7 @@ def main():
     features = [{"package_id": item["package_id"], "features": item["features"], "kind": item["target"]["kind"]}
                 for item in artifacts if item.get("reason") == "compiler-artifact"]
     (output / "compiled-features.json").write_text(json.dumps(features, indent=2) + "\n")
-    run(["python3", str(repo / "scripts/owned-x11.py"), "--", "cargo", "test", "--locked", "--target", target, "-j", "4", "--", "--test-threads=1"], cwd=output, env=env)
+    run(["python3", str(repo / "scripts/owned-x11.py"), "--", "cargo", "test", "--locked", "--target", target, "--", "--test-threads=1"], cwd=output, env=env)
     run(["python3", str(repo / "scripts/owned-x11.py"), "--", "cargo", "nextest", "run", "--locked", "--target", target, "-j", "1"], cwd=output, env=env)
     wide_env = dict(env, NDS_ULTRAWIDE_FIXTURE="1")
     run(["python3", str(repo / "scripts/owned-x11.py"), "--screen", "5120x1440x24", "--", "cargo", "test", "--locked", "--target", target, "tests::a_real_ultrawide_source_fits_the_existing_frame_budget", "--", "--ignored", "--exact", "--test-threads=1"], cwd=output, env=wide_env)

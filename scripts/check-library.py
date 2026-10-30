@@ -214,8 +214,8 @@ def main():
     run(["cargo", "audit", "--deny", "warnings", "--file", str(consumer / "Cargo.lock")], cwd=consumer, env=env)
     if digest(consumer / "Cargo.lock") != locked_sha256:
         raise ValueError("dependency tools changed the locked source graph")
-    run(cargo(["clippy", "--locked", "--offline", "--target", TARGET, "-j", "4", "--", "-D", "warnings"]), cwd=consumer, env=env)
-    compiled = subprocess.run(cargo(["build", "--locked", "--offline", "--target", TARGET, "-j", "4", "--message-format=json"]), cwd=consumer, env=env, text=True, stdout=subprocess.PIPE)
+    run(cargo(["clippy", "--locked", "--offline", "--target", TARGET, "--", "-D", "warnings"]), cwd=consumer, env=env)
+    compiled = subprocess.run(cargo(["build", "--locked", "--offline", "--target", TARGET, "--message-format=json"]), cwd=consumer, env=env, text=True, stdout=subprocess.PIPE)
     (output / "build.jsonl").write_text(compiled.stdout)
     artifacts = [json.loads(line) for line in compiled.stdout.splitlines() if line.startswith("{")]
     if compiled.returncode:
