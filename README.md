@@ -32,7 +32,8 @@ and GitHub-hosted runner with `gh attestation verify --bundle`. The signing
 repository remains the identity recorded when the release was issued; verification
 does not depend on GitHub retaining its attestation API entry after a transfer.
 
-The issued `0.1.0` compatibility binaries exclude desktop features. Their
+The issued compatibility binaries selected by `provider.lock.json` exclude desktop
+features. Their
 provenance does not qualify the source-built host or receiver.
 
 Screen integration has separate gates from the default read-only API.
