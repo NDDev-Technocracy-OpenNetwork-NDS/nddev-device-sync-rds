@@ -42,14 +42,14 @@ def derive(original, destination, transform, expected_manifest, changed_file="Ca
         manifest = destination / changed_file
         manifest.write_text(transform(manifest.read_text(encoding="utf-8")), encoding="utf-8", newline="\n")
         for patch, _changes in source_patches:
-            subprocess.run(["git", "apply", "--whitespace=error", "--", str(patch)], cwd=destination, check=True)
+            subprocess.run(["git", "-c", "core.autocrlf=false", "-c", "core.eol=lf", "apply", "--whitespace=error", "--", str(patch)], cwd=destination, check=True)
     originals, derived = files(original), files(destination)
     require(originals.keys() == derived.keys(), "derived build has extra or missing source files")
     for relative, source in originals.items():
         target = derived[relative]
         require(target.resolve().is_relative_to(destination.resolve()), "unsafe derived source link")
         if relative in expected:
-            require(not target.is_symlink() and digest(target) == expected[relative], "derived source patch mismatch")
+            require(not target.is_symlink() and digest(target) == expected[relative], f"derived source patch mismatch: {relative}")
         elif source.is_symlink():
             require(target.is_symlink() and source.readlink() == target.readlink(), "derived source link mismatch")
         else:
