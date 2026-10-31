@@ -88,8 +88,21 @@ impl BuiltinHost {
         // Before capture starts, accept/handshake can be cancelled directly.
         // Once serving owns native work, its exact task must complete the drain.
         let accepting = async {
-            let incoming = self.endpoint.accept().await.ok_or(ScreenError::Closed)?;
-            incoming.await.map_err(unavailable)
+            loop {
+                let incoming = self.endpoint.accept().await.ok_or(ScreenError::Closed)?;
+                if let Ok(conn) = incoming.await {
+                    if conn.remote_id().as_bytes() == &self.ready.permit().viewer_endpoint {
+                        // A matching transport key only selects the candidate.
+                        // The original signed grant/policy still admits media.
+                        return Ok(conn);
+                    }
+                    conn.close(2u32.into(), b"owned host peer denied");
+                }
+                // Failed/unrelated pre-admission connections own no capture and
+                // cannot consume this role or renew its original finite lease.
+                // Yield even under a ready incoming queue so stop/expiry wins.
+                tokio::task::yield_now().await;
+            }
         };
         let conn = tokio::select! { biased;
             _ = cancel.cancelled() => return Ok(()),
@@ -1083,6 +1096,110 @@ mod tests {
             // The Python fixture also unconditionally resumes and joins its
             // exact source on failed assertions; no successful drain is inferred.
         }
+    }
+
+    async fn reject_foreign_peer(
+        host: &Endpoint,
+        grant: &Grant,
+        task: &mut JoinHandle<Result<()>>,
+    ) {
+        let foreign = endpoint(&SecretKey::generate()).await;
+        // Even possession of the fixture's original viewer grant cannot make
+        // a different transport key its subject or consume the admitted role.
+        let refused = tokio::time::timeout(
+            Duration::from_secs(3),
+            rds_client::connect_authorized(&foreign, host.addr(), grant),
+        )
+        .await
+        .expect("foreign connection must be refused within the fixture bound");
+        assert!(refused.is_err());
+        foreign.close().await;
+        assert!(
+            tokio::time::timeout(Duration::from_millis(150), task)
+                .await
+                .is_err(),
+            "a foreign connection must not consume the original host role"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    #[ignore = "requires the explicit owned Xvfb host-peer gate"]
+    async fn actual_builtin_host_keeps_original_peer_and_lease_after_foreign_connection() {
+        assert_eq!(std::env::var("NDS_OWNED_XVFB").as_deref(), Ok("1"));
+        let paint = Paint::new();
+        let mut outcomes = Vec::new();
+        for ending in ["viewer", "cancel", "expiry"] {
+            let (host, viewer, projection, grant) =
+                setup(if ending == "expiry" { 3 } else { 60 }).await;
+            let original_peer = projection.permit().viewer_endpoint;
+            let original_expiry = projection.permit().lease.expires_at_ms();
+            let caps = rds_desktop::capabilities_bounded().await.unwrap();
+            let original_deadline = Instant::now()
+                + Duration::from_millis(
+                    projection
+                        .permit()
+                        .lease
+                        .remaining_ms(now().unwrap())
+                        .unwrap(),
+                );
+            let cancel = CancellationToken::new();
+            let stop = cancel.clone();
+            let serving = BuiltinHost::new(host.clone(), projection.clone(), caps).unwrap();
+            let mut task = tokio::spawn(serving.serve(stop));
+            reject_foreign_peer(&host, &grant, &mut task).await;
+            if ending == "viewer" {
+                let mut live = NativeViewer::open(
+                    &viewer,
+                    host.addr(),
+                    projection,
+                    &grant,
+                    CancellationToken::new(),
+                )
+                .await
+                .unwrap();
+                assert_eq!(live.conn.remote_id(), host.id());
+                let mut frame = live.pull_frame().await.unwrap();
+                assert!(frame.read_once().unwrap()[2] > 180);
+                drop(frame);
+                cancel.cancel();
+                live.close().await.unwrap();
+                assert!(live.is_drained());
+            } else if ending == "cancel" {
+                cancel.cancel();
+            }
+            let drain_deadline = if ending == "expiry" {
+                original_deadline + Duration::from_millis(500)
+            } else {
+                Instant::now() + Duration::from_secs(5)
+            };
+            tokio::time::timeout_at(drain_deadline, &mut task)
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+            if ending == "expiry" {
+                assert!(now().unwrap() >= original_expiry);
+                assert!(cancel.is_cancelled());
+            }
+            assert_eq!(viewer.id().as_bytes(), &original_peer);
+            host.close().await;
+            viewer.close().await;
+            outcomes.push(serde_json::json!({
+                "after_foreign_rejection": ending,
+                "original_peer_and_expiry_preserved": true,
+                "host_joined_before_endpoint_close": true,
+                "known_native_pixels": ending == "viewer"
+            }));
+        }
+        drop(paint);
+        std::fs::write(
+            std::env::var("NDS_HOST_PEER_RESULTS").unwrap(),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "passed": true,
+                "cases": outcomes,
+                "scope": "owned Linux Xvfb exact-peer host admission; generated fixture grants, not Accounts-authenticated product acceptance"
+            })).unwrap(),
+        ).unwrap();
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

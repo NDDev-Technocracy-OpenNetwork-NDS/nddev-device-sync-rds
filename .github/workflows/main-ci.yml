@@ -106,7 +106,8 @@ jobs:
           CARGO_HOME: ${{ runner.temp }}/rds-owned-cargo-home
           NDS_RECEIVER_RESULTS: ${{ runner.temp }}/rds-owned-receiver-results.json
           NDS_HOST_DRAIN_RESULTS: ${{ runner.temp }}/rds-owned-host-drain-results.json
-        run: printf '%s\n' "CARGO_HOME=$CARGO_HOME" "NDS_RECEIVER_RESULTS=$NDS_RECEIVER_RESULTS" "NDS_HOST_DRAIN_RESULTS=$NDS_HOST_DRAIN_RESULTS" >> "$GITHUB_ENV"
+          NDS_HOST_PEER_RESULTS: ${{ runner.temp }}/rds-owned-host-peer-results.json
+        run: printf '%s\n' "CARGO_HOME=$CARGO_HOME" "NDS_RECEIVER_RESULTS=$NDS_RECEIVER_RESULTS" "NDS_HOST_DRAIN_RESULTS=$NDS_HOST_DRAIN_RESULTS" "NDS_HOST_PEER_RESULTS=$NDS_HOST_PEER_RESULTS" >> "$GITHUB_ENV"
       - name: Install pinned Rust
         run: rustup toolchain install 1.99.1 --profile minimal --component rustfmt,clippy
       - name: Install Linux build and owned display inputs
@@ -125,3 +126,5 @@ jobs:
         run: python3 scripts/owned-x11.py -- cargo test --locked --features owned-screen --lib actual_receiver_age_pause_idle_pressure_and_expiry -- --ignored --nocapture
       - name: Actual native host capture drain
         run: python3 scripts/owned-x11.py -- cargo test --locked --features owned-screen --lib actual_builtin_host_retains_capture_until_cancel_or_expiry_drains -- --ignored --nocapture
+      - name: Actual native host peer admission
+        run: python3 scripts/owned-x11.py -- cargo test --locked --features owned-screen --lib actual_builtin_host_keeps_original_peer_and_lease_after_foreign_connection -- --ignored --nocapture

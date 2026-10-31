@@ -29,3 +29,4 @@ owned-screen-check:
     cargo test --locked --features owned-screen --lib
     python3 scripts/owned-x11.py -- cargo test --locked --features owned-screen --lib actual_receiver_age_pause_idle_pressure_and_expiry -- --ignored --nocapture
     python3 scripts/owned-x11.py -- cargo test --locked --features owned-screen --lib actual_builtin_host_retains_capture_until_cancel_or_expiry_drains -- --ignored --nocapture
+    python3 scripts/owned-x11.py -- cargo test --locked --features owned-screen --lib actual_builtin_host_keeps_original_peer_and_lease_after_foreign_connection -- --ignored --nocapture
