@@ -155,21 +155,27 @@ still be draining. Cancellation alone does not confirm cleanup.
 `BuiltinHost::serve` closes only its admitted connection on cancellation or
 expiry, then awaits the same serving operation and native capture. Keep that
 exact task and its Accounts purpose/key lease across an interrupted close wait.
+Before media admission, unrelated verified peer keys are rejected on their own
+connections while the host waits for its original viewer. Neither those
+connections nor failed handshakes renew the original lease or replace its
+projection; the matching viewer still needs the existing signed grant checks.
 Receiver, heartbeat and retained decoder tasks carry the initiating tracing span
 and subscriber; the existing SDK remains the sole diagnostic delivery owner.
 An unresponsive native source keeps drain unresolved; it does not authorize
 releasing the old owner or starting a conflicting replacement.
 
 On an admitted native Linux executor, prepare the checked Cargo environment
-above and set `NDS_RECEIVER_RESULTS` and `NDS_HOST_DRAIN_RESULTS` to separate
-files in the owned qualification output directory, then run
-`just owned-screen-check`. It uses separate private Xvfb lifetimes for the
-receiver and host-drain scenarios. The latter pauses only its retained fixture
+above and set `NDS_RECEIVER_RESULTS`, `NDS_HOST_DRAIN_RESULTS` and
+`NDS_HOST_PEER_RESULTS` to separate files in the owned qualification output
+directory, then run `just owned-screen-check`. Each scenario has its own private
+Xvfb lifetime. The host-drain gate pauses only its retained fixture
 process, checks that cancellation/expiry cannot acknowledge capture drain while
 that source is stopped, then resumes it and joins before endpoint cleanup.
 The retained-job unit regression checks cancellation ordering and failure
 retention; it is not a physical codec acceptance claim. Run the actual native
 and downstream SDK gates for the selected source before adoption.
+The host-peer gate rejects a foreign first connection, then checks actual known
+pixels for the original viewer, cancellation and unchanged original expiry.
 
 The separate `owned-screen-linux` CI gate runs the receiver subsystem on its own
 Xvfb, generated native keys and passive Core projection. The fixture test is
